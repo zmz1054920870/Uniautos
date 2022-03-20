@@ -23,6 +23,7 @@ message = '''<ifm xmlns="http://www.huawei.com/netconf/vrp" content-version="1.0
                       </interface>
                   </interfaces>
               </ifm>'''
+print(11111111111111111111)
 # get调用
 ret = conn.get(("subtree", message))
 # 打印返回的信息
