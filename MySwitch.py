@@ -3,12 +3,12 @@
 # @Time    : 2021/3/25 23:53
 # @Author  : 超级无敌张铁柱
 # @File    : MySwitch.py
-#!/usr/bin/python3.6
+# !/usr/bin/python3.6
 # -*- coding: utf-8 -*-
 # @Time    : 2021/3/25 23:53
 # @Author  : 超级无敌张铁柱
 # @File    : switch.py
-#!/usr/bin/python3.6
+# !/usr/bin/python3.6
 # -*- coding: utf-8 -*-
 # @Time    : 2021/3/25 23:53
 # @Author  : 超级无敌张铁柱
@@ -63,13 +63,12 @@
 
 
 import re
-import paramiko
-import time
 import socket
-import re
-import os
+import time
 
-ip = '192.168.56.33'
+import paramiko
+
+ip = '192.168.56.3'
 name = 'client001'
 password = 'Huawei@1234'
 ibc_name = 'ibc_os_hs'
@@ -171,39 +170,6 @@ class ssh_client(object):
         return result
 
 
-def aaa(params: dict, pattern):
-    """
-
-    :param pattern:
-    :param params: ['6 8 10 12 14 16 18 20 22 24', '26 100 to 102 104 to 106 108 to 110 1000 to 1002 1004 to 1006 1008 1010 1020 1030']
-    :return:
-    """
-    result = []
-    if not params:
-        return result
-
-    match_target_result_str = ' '.join(params)  # 拼接 '6 8 10 12 14 16 18 20 22 24 26 100 to 102 104 to 106'
-    number_to_number: list = re.findall(pattern, match_target_result_str)  # [('100', '102'), ('104', '106')]
-    if number_to_number:
-        for item in number_to_number:
-            for i in range(int(item[0]), int(item[1]) + 1):
-                result.append(str(i))
-
-    target_result_list = match_target_result_str.split(
-        'to')  # # ['6 8 10 12 14 16 18 20 22 24 26 100 ', ' 102 104 ', ' 106 ']
-    for i in range(len(target_result_list)):
-        target_result_list[i] = target_result_list[i].lstrip()
-        target_result_list[i] = target_result_list[i].rstrip()
-
-    temp_list = ' '.join(target_result_list).split(' ')
-    # print(temp_list)
-    for j in temp_list:
-        if j in result:
-            continue
-        result.append(j)
-    return result
-
-
 class BaseCase(object):
 
     def __init__(self):
@@ -275,25 +241,7 @@ class BaseCase(object):
         print(result_list)
         return result_list
 
-    def modify_interface_type(self, interface, target_type):
-        """
-
-        :param interface: 要修改的交换机端口
-        :param target_type: 修改成哪种类型
-        :return:
-        """
-        into_system_view = {'command': ['system-view'], 'waitstr': ']'}
-        self.run(into_system_view)
-        into_interface = {'command': ['interface %s' % interface], 'waitstr': ']'}
-        self.run(into_interface)
-        get_interface_information = {'command': ['display this'], 'waitstr': ']'}
-        res = self.run(get_interface_information)
-        untagged_vlan = r'allow-pass vlan (?P<tagged>.+\d)'
-        res2 = re.findall(untagged_vlan, res)
-
-        return res2
-
-    def get_interface_info(self, interface):
+    def get_interface_info(self, interface:str):
         """
 
         :param interface:
@@ -412,7 +360,110 @@ class BaseCase(object):
             result.append(j)
         return result
 
+    def into_view(self):
+        """
+        进入操作视图
+        :return: boolean
+        """
+        into_system_view = {'command': ['system-view'], 'waitstr': ']'}
+        into_view_echo = self.run(into_system_view)     # 🔺注意拿回显
+        cmd_correct_pattern = r'Enter system view, return user view with return command'
+        if re.search(cmd_correct_pattern, into_view_echo):
+            return True
+
+        cmd_failed_pattern = r'\[\*'
+        if re.search(cmd_failed_pattern, into_view_echo):
+            # return_user_view = {'command': ['return'], 'input': ['yes', '>'],
+            #                     'waitstr': r']|\[Y\(yes\)/N\(no\)/C\(cancel\)\]'}
+            return_user_view = {'command': ['return'], 'waitstr': r'\[Y\(yes\)/N\(no\)/C\(cancel\)\]'}
+            confirm = {'command': ['no'], 'waitstr': '>'}
+            self.run(return_user_view)
+            self.run(confirm)
+            into_view_echo = self.run(into_system_view)     # 🔺注意拿回显
+            if re.search(cmd_correct_pattern, into_view_echo):
+                return True
+            return False
+
+        return_user_view = {'command': ['return'], 'waitstr': '>'}
+        self.run(return_user_view)
+        into_view_echo = self.run(into_system_view)     # 🔺注意拿回显
+        if re.search(cmd_correct_pattern, into_view_echo):
+            return True
+        return False
+
+    def modify_interface_type(self, interface_number: str, interface_type: str):
+        """
+        修改交换机接口类型
+        :param interface_number: 交换机接口号
+        :param interface_type: 交换机类型
+        :return: boolean
+        """
+        if interface_type not in ['access', 'trunk', 'hybrid']:
+            raise (TypeError, '接口类型必须是access trunk hybrid,实际接收到的类型为:',  interface_type)
+        self.into_view()
+        into_interface = {'command': ['interface %s' % interface_number], 'waitstr': ']'}
+        self.run(into_interface)
+
+        init_interface = {'command': ['port link-type %s' % interface_type], 'waitstr': ']'}
+        self.run(init_interface)
+
+        commit = {'command': ['commit'], 'waitstr': ']'}
+        self.run(commit)
+
+        display_this = {'command': ['display this'], 'waitstr': ']'}
+        interface_summary = self.run(display_this)          # 🔺注意拿回显
+        pattern = r'link-type %s' % interface_type
+        if re.search(pattern, interface_summary):
+            return True
+        return False
+
+    def create_vl(self, vl: int):
+        """
+        创建VLAN
+        :param vl: vlan id, vlan有效范围1-4094)
+        :return: boolean
+        """
+        if not isinstance(vl, int):
+            raise (TypeError, 'vl类型错误,请输入1-4094范围内整数')
+        if vl > 4094 or vl < 1:
+            raise (TypeError, 'vl数值错误,请输入1-4094范围内整数')
+        vl = str(vl)
+        self.into_view()
+        create_vl_cmd = {'command': ['vlan batch %s' % vl], 'waitstr': ']'}
+        self.run(create_vl_cmd)
+        all_vl = self.get_switch_all_vlan()
+        if vl in all_vl:
+            return True
+        return False
+
+    def delete_vl(self, vl:int):
+        """
+        删除VLAN
+        :param vl:
+        :return:
+        """
+        if not isinstance(vl, int):
+            raise (TypeError, 'vl类型错误,请输入1-4094范围内整数')
+        if vl > 4094 or vl < 1:
+            raise (TypeError, 'vl数值错误,请输入1-4094范围内整数')
+        delete_vl_cmd = {'command': ['undo vlan batch %s' % vl], 'waitstr': ']'}
+        self.run(delete_vl_cmd)
+        all_vl = self.get_switch_all_vlan()
+        if vl in all_vl:
+            return False
+        return True
+
+
+
+# a = '[Y(yes)/N(no)/C(cancel)]'
 
 client = BaseCase()
-temp3 = client.get_interface_info('GE1/0/7')
-print(temp3)
+# temp3 = client.get_interface_info('GE1/0/20')
+# print(temp3)
+
+# print(client.modify_interface_type('GE1/0/10', '1'))
+# print(client.modify_interface_type('GE1/0/11', '2'))
+# print(client.into_view())
+# print(client.into_view())
+a = client.create_vl()
+print(a)

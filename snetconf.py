@@ -5,7 +5,6 @@
 # @File    : snetconf.py
 from ncclient import manager
 
-
 conn = manager.connect(host="192.168.56.3", port=22,
                        username="client001", password="Huawei@1234",
                        hostkey_verify=False,
@@ -28,19 +27,6 @@ print(11111111111111111111)
 ret = conn.get(("subtree", message))
 # 打印返回的信息
 print(ret)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # with manager.connect(
 #     host="192.168.56.33",
